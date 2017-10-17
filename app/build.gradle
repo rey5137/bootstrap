@@ -1,0 +1,215 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-android-extensions'
+apply from: "$rootProject.projectDir/buildsystem/config.gradle"
+apply from: "$rootProject.projectDir/buildsystem/library.gradle"
+//apply from: "$rootProject.projectDir/buildsystem/jacoco.gradle"
+//apply from: "$rootProject.projectDir/buildsystem/beta.gradle"
+//apply plugin: 'io.fabric'
+
+def configuration = ext.configuration
+def library = ext.library
+
+repositories {
+    flatDir { dirs 'libs' }
+    maven { url "https://oss.sonatype.org/content/repositories/snapshots" }
+    maven { url 'https://maven.fabric.io/public' }
+    maven { url "https://jitpack.io" }
+    mavenCentral()
+    google()
+}
+
+buildscript {
+    apply from: "$rootProject.projectDir/buildsystem/library.gradle"
+    def version = ext.version
+
+    repositories {
+        jcenter()
+        maven { url 'https://maven.fabric.io/public' }
+        mavenCentral()
+        google()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$version.kotlin"
+//        classpath "org.jacoco:org.jacoco.core:$version.jacoco"
+//        classpath "io.fabric.tools:gradle:$version.fabric"
+    }
+}
+
+android {
+    compileSdkVersion                   configuration.compileSdkVersion
+    buildToolsVersion                   configuration.buildToolsVersion
+
+    defaultConfig {
+        applicationId                   configuration.applicationId
+        minSdkVersion                   configuration.minimumSdkVersion
+        targetSdkVersion                configuration.targetSdkVersion
+        versionCode                     buildVersionCode()
+        versionName                     buildVersionName()
+    }
+
+    buildTypes {
+        debug {
+            versionNameSuffix           '-SNAPSHOT'
+
+            // Enables code coverage with Jacoco only for instrumentation tests.
+            // Coverage for JVM tests done by code_quality_tools/jacoco.gradle.
+            testCoverageEnabled         false
+            debuggable                  true
+        }
+
+        release {
+            minifyEnabled               true
+            proguardFiles               getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
+            // Enables code coverage with Jacoco only for instrumentation tests.
+            // Coverage for JVM tests done by code_quality_tools/jacoco.gradle.
+            testCoverageEnabled         false
+        }
+    }
+
+    if(!configuration.debugKeyFile.isEmpty()) {
+        android.signingConfigs {
+            debug {
+                storeFile                   file(configuration.debugKeyFile)
+                storePassword               "android"
+                keyAlias                    "androiddebugkey"
+                keyPassword                 "android"
+            }
+        }
+        android.buildTypes.debug.signingConfig signingConfigs.debug
+    }
+
+    productFlavors {
+        dev {
+            minSdkVersion               21
+            multiDexEnabled             true
+            resConfigs                  "en", "xxhdpi"
+            buildConfigField            'boolean', 'MULTI_DEX', 'false'
+        }
+
+        staging{
+            minSdkVersion               configuration.minimumSdkVersion
+            multiDexEnabled             true
+            buildConfigField            'boolean', 'MULTI_DEX', 'true'
+        }
+
+        prod {
+            minSdkVersion               configuration.minimumSdkVersion
+            multiDexEnabled             false
+            buildConfigField            'boolean', 'MULTI_DEX', 'false'
+        }
+    }
+
+    sourceSets {
+        // Common code for non production flavor in src/nonProd.
+        dev.java.srcDirs += 'src/nonProd/java'
+        dev.java.srcDirs += 'src/nonProd/kotlin'
+        dev.res.srcDirs += 'src/nonProd/res'
+        dev.manifest.srcFile 'src/nonProd/AndroidManifest.xml'
+
+        staging.java.srcDirs += 'src/nonProd/java'
+        staging.java.srcDirs += 'src/nonProd/kotlin'
+        staging.res.srcDirs += 'src/nonProd/res'
+        staging.manifest.srcFile 'src/nonProd/AndroidManifest.xml'
+
+        // Common code for all tests lives in src/commonTests.
+        test.java.srcDir 'src/commonTests/java'
+        androidTest.java.srcDir 'src/commonTests/java'
+
+        // Unit tests live in src/unitTest.
+        test.java.srcDir 'src/unitTests/java'
+
+        // Integration tests live in src/integrationTest.
+        test.java.srcDir 'src/integrationTests/java'
+
+        // Unit tests for debug build type specific code live in src/debugUnitTest.
+        testDebug.java.srcDir 'src/debugUnitTests/java'
+
+        // Unit tests for release build type specific code live in src/releaseUnitTest.
+        testRelease.java.srcDir 'src/releaseUnitTests/java'
+
+        // Functional tests live in src/functionalTests.
+        androidTest.java.srcDir 'src/functionalTests/java'
+
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    packagingOptions {
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/NOTICE.txt'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/services/javax.annotation.processing.Processor'
+        exclude 'META-INF/rxjava.properties'
+    }
+
+    dexOptions {
+        preDexLibraries true
+        maxProcessCount 4
+    }
+
+    // This allows us see tests execution progress in the output on the CI.
+    testOptions.unitTests.all {
+        testLogging {
+            events 'passed', 'skipped', 'failed', 'standardOut', 'standardError'
+            exceptionFormat 'full'
+        }
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force "${library.kotlin}"
+        force "${library.support_annotations}"
+//        force "org.ow2.asm:asm:5.0.3"
+//        force "org.objenesis:objenesis:2.2"
+    }
+}
+
+kapt {
+    generateStubs = true
+}
+
+dependencies {
+    compile                 fileTree(dir: 'libs', include: ['*.jar'])
+    compile                 "${library.kotlin}"
+    compile                 "${library.support_annotations}"
+    compile                 "${library.support_appcompat}"
+    compile                 "${library.support_recyclerview}"
+    compile                 "${library.mvp2}"
+    compile                 "${library.rxjava2}"
+    compile                 "${library.rxandroid2}"
+
+    compile                 "${library.dagger}"
+    kapt                    "${library.dagger_compiler}"
+    provided                "${library.javax_annotation}"
+
+    compile                 "${library.timber}"
+//    compile                 ("${library.crashlytics}")          {transitive = true}
+
+    devCompile              "${library.debug_db}"
+    devCompile              "${library.okhttp_logging}"
+
+    stagingCompile          "${library.debug_db}"
+    stagingCompile          "${library.multidex}"
+    stagingCompile          "${library.okhttp_logging}"
+
+    testCompile             "${library.junit}"
+    testCompile             "${library.assertj}"
+    testCompile             "${library.mockito}"
+    testCompile             "${library.robolectric}"
+    testCompile             "${library.kluent}"
+    testCompile             "${library.mockito_kotlin}"
+
+    androidTestCompile      "${library.support_annotations}"
+    androidTestCompile      "${library.support_test}"
+    androidTestCompile      "${library.support_test_rules}"
+    androidTestCompile      "${library.espresso}"
+    androidTestCompile      "${library.assertj}"
+    androidTestCompile      "${library.mockito}"
+    androidTestCompile      "${library.mockito_kotlin}"
+    androidTestCompile      "${library.kluent}"
+    androidTestCompile      "${library.dexmaker}"
+    androidTestCompile      "${library.dexmaker_mockito}"
+}

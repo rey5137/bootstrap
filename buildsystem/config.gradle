@@ -1,0 +1,34 @@
+ext.configuration = [
+        applicationId               : "com.rey.bootstrap",
+        versionMajor                : 0,
+        versionMinor                : 0,
+        versionPatch                : 1,
+        versionClassifier           : "",
+        minimumSdkVersion           : 19,
+        compileSdkVersion           : 26,
+        targetSdkVersion            : 26,
+        buildToolsVersion           : "26.0.1",
+        debugKeyFile                : ""
+]
+
+def configuration = ext.configuration;
+
+//format: <2 digits - minApi> <1 digit - reverse> <2 digits - major> <2 digits - minor> <2 digits - patch>
+ext.buildVersionCode = {
+    return configuration.minimumSdkVersion * 10000000 + configuration.versionMajor * 10000 + configuration.versionMinor * 100 + configuration.versionPatch
+}
+
+//format: major.minor.patch
+ext.buildVersionNameWithoutClassifier = {
+    return "${configuration.versionMajor}.${configuration.versionMinor}.${configuration.versionPatch}";
+}
+
+//format: major.minor.patch-Classifier
+ext.buildVersionName = {
+    String versionName = ext.buildVersionNameWithoutClassifier();
+    if (configuration.versionClassifier != null && !configuration.versionClassifier.isEmpty()) {
+        versionName = versionName + "-" + configuration.versionClassifier
+    }
+    return versionName;
+}
+
